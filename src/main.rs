@@ -1,4 +1,6 @@
+use anyhow::Context;
 use axum::{
+    extract::Extension,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -6,7 +8,95 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::env;
+use std::{
+    collections::HashMap,
+    env,
+    sync::{Arc, RwLock},
+};
+use thiserror::Error;
+
+// 起こりうるエラーの定義
+#[derive(Debug, Error)]
+enum RepositoryError {
+    #[error("NotFound id is {0}")]
+    NotFound(i32),
+}
+
+// トレイトで共通の振る舞い（CRUD）を定義する
+// これを継承した構造体はCRUDできるようになる
+pub trait TodoRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
+    fn create(&self, payload: CreateTodo) -> Todo;
+    fn find(&self, id: i32) -> Option<Todo>;
+    fn all(&self) -> Vec<Todo>;
+    fn update(&self, id: i32, payload: UpdateTodo) -> anyhow::Result<Todo>;
+    fn delete(&self, id: i32) -> anyhow::Result<Todo>;
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct Todo {
+    id: i32,
+    text: String,
+    completed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct CreateTodo {
+    text: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct UpdateTodo {
+    text: Option<String>,
+    completed: bool,
+}
+
+impl Todo {
+    pub fn new(id: i32, text: String) -> Self {
+        Self {
+            id,
+            text,
+            completed: false,
+        }
+    }
+}
+
+// とりあえずTODOデータをHashMapに保存する
+type TodoDatas = HashMap<i32, Todo>;
+
+#[derive(Debug, Clone)]
+pub struct TodoRepositoryForMemory {
+    store: Arc<RwLock<TodoDatas>>,
+}
+
+impl TodoRepositoryForMemory {
+    pub fn new() -> Self {
+        TodoRepositoryForMemory {
+            store: Arc::default(),
+        }
+    }
+}
+
+impl TodoRepository for TodoRepositoryForMemory {
+    fn create(&self, payload: CreateTodo) -> Todo {
+        todo!()
+    }
+
+    fn find(&self, id: i32) -> Option<Todo> {
+        todo!()
+    }
+
+    fn all(&self) -> Vec<Todo> {
+        todo!()
+    }
+
+    fn update(&self, id: i32, payload: UpdateTodo) -> anyhow::Result<Todo> {
+        todo!()
+    }
+
+    fn delete(&self, id: i32) -> anyhow::Result<Todo> {
+        todo!()
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -15,7 +105,9 @@ async fn main() {
     env::set_var("RUST_LOG", log_lavel);
     tracing_subscriber::fmt::init();
 
-    let app = create_app();
+    let repository = TodoRepositoryForMemory::new();
+    let app = create_app(repository);
+
     // アドレスを作成する
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
@@ -30,36 +122,25 @@ async fn main() {
 }
 
 // ルーティング設定の作成
-fn create_app() -> Router {
+// 柔軟性をもたせるために、TodoRepositoryトレイトを継承したジェネリクスで引数を型指定
+fn create_app<T: TodoRepository>(repository: T) -> Router {
     Router::new()
         .route("/", get(root))
-        .route("/users", post(create_user))
+        .route("/todos", post(create_todo::<T>))
+        .layer(Extension(Arc::new(repository))) // axumアプリ内でrepositoryを共有できるようになる
 }
 
 async fn root() -> &'static str {
     "Hello, world!"
 }
 
-async fn create_user(Json(payload): Json<CreateUser>) -> impl IntoResponse {
-    let user = User {
-        id: 1337,
-        username: payload.username,
-    };
+pub async fn create_todo<T: TodoRepository>(
+    Json(payload): Json<CreateTodo>,
+    Extension(repository): Extension<Arc<T>>
+) -> impl IntoResponse {
+    let todo = repository.create(payload);
 
-    (StatusCode::CREATED, Json(user))
-}
-
-// JSONを構造体にデシリアライズすることが可能になる
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-struct CreateUser {
-    username: String,
-}
-
-// 構造体をJSONにシリアライズすることが可能になる
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-struct User {
-    id: u64,
-    username: String,
+    (StatusCode::CREATED, Json(todo))
 }
 
 // テストを書く
@@ -69,17 +150,18 @@ mod test {
     use super::*;
     use axum::{
         body::Body,
-        http::{header, Method, Request},
+        http::Request,
     };
     use tower::ServiceExt;
 
     // root関数のテスト
     #[tokio::test]
     async fn should_return_hello_world() {
+        let repository = TodoRepositoryForMemory::new();
         // リクエストを作成
         let req = Request::builder().uri("/").body(Body::empty()).unwrap();
         // 作ったリクエストからoneshot関数でレスポンスを得る
-        let res = create_app().oneshot(req).await.unwrap();
+        let res = create_app(repository).oneshot(req).await.unwrap();
 
         // 得られたレスポンスをBytes型を経てString型に変換する
         let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -87,28 +169,4 @@ mod test {
         assert_eq!(body, "Hello, world!")
     }
 
-    // JSON bodyのテスト
-    #[tokio::test]
-    async fn should_return_user_data() {
-        // 同様にリクエストを作成し、レスポンスを得て、User型インスタンスを作る
-        // ちゃんとheaderとbodyも設定しておく
-        let req = Request::builder()
-            .uri("/users")
-            .method(Method::POST)
-            .header(header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-            .body(Body::from(r#"{ "username": "田中太郎" }"#))
-            .unwrap();
-        let res = create_app().oneshot(req).await.unwrap();
-
-        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-        let body: String = String::from_utf8(bytes.to_vec()).unwrap();
-        let user: User = serde_json::from_str(&body).expect("cannot convert User instance.");
-        assert_eq!(
-            user,
-            User {
-                id: 1337,
-                username: "田中太郎".to_string(),
-            }
-        )
-    }
 }
