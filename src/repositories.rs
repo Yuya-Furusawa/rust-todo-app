@@ -15,7 +15,9 @@ enum RepositoryError {
 
 // トレイトで共通の振る舞い（CRUD）を定義する
 // これを継承した構造体はCRUDできるようになる
-pub trait TodoRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
+// CloneとSendとSyncを実装した型に対して実装するトレイト（SendとSyncは基本的にどの型にも実装されている）
+// 'staticとする事によってライフタイムをなくす
+pub trait TodoRepository: Clone + Send + Sync + 'static {
     fn create(&self, payload: CreateTodo) -> Todo;
     fn find(&self, id: i32) -> Option<Todo>;
     fn all(&self) -> Vec<Todo>;
