@@ -13,7 +13,9 @@ enum RepositoryError {
     NotFound(i32),
 }
 
-// トレイトで共通の振る舞い（CRUD）を定義する
+// データレポジトリを作成
+
+// トレイトを用いてデータレポジトリの振る舞い（CRUD）を定義する
 // これを継承した構造体はCRUDできるようになる
 // CloneとSendとSyncを実装した型に対して実装するトレイト（SendとSyncは基本的にどの型にも実装されている）
 // 'staticとする事によってライフタイムをなくす
@@ -37,6 +39,13 @@ pub struct CreateTodo {
     text: String,
 }
 
+#[cfg(test)]
+impl CreateTodo {
+  pub fn new(text: String) -> Self {
+    Self { text }
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct UpdateTodo {
     text: Option<String>,
@@ -52,6 +61,8 @@ impl Todo {
         }
     }
 }
+
+// 仮想のデータベース（実態はHashMap）
 
 // とりあえずTODOデータをHashMapに保存する
 type TodoDatas = HashMap<i32, Todo>;
@@ -77,6 +88,8 @@ impl TodoRepositoryForMemory {
     }
 }
 
+// RepositoryForMemoryでの各操作を定義する
+// このレポジトリはhttpハンドラーで使われる
 impl TodoRepository for TodoRepositoryForMemory {
     fn create(&self, payload: CreateTodo) -> Todo {
         let mut store = self.write_store_ref();

@@ -1,7 +1,6 @@
 mod handlers;
 mod repositories;
 
-use crate::repositories::{TodoRepository, TodoRepositoryForMemory};
 use axum::{
     extract::Extension,
     routing::{get, post},
@@ -13,7 +12,8 @@ use std::{
     sync::{Arc},
 };
 
-use handlers::create_todo;
+use repositories::{TodoRepository, TodoRepositoryForMemory};
+use handlers::{create_todo, find_todo, all_todo, update_todo, delete_todo};
 
 #[tokio::main]
 async fn main() {
@@ -43,7 +43,13 @@ async fn main() {
 fn create_app<T: TodoRepository>(repository: T) -> Router {
     Router::new()
         .route("/", get(root))
-        .route("/todos", post(create_todo::<T>))
+        .route("/todos", post(create_todo::<T>).get(all_todo::<T>))
+        .route(
+            "/todos/:id",
+            get(find_todo::<T>)
+                .delete(delete_todo::<T>)
+                .patch(update_todo::<T>)
+            )
         .layer(Extension(Arc::new(repository))) // axumアプリ内でrepositoryを共有できるようになる
 }
 
@@ -58,9 +64,11 @@ mod test {
     use super::*;
     use axum::{
         body::Body,
-        http::Request,
+        http::{header, Method, Request},
+        response::Response,
     };
     use tower::ServiceExt;
+    use crate::repositories::{CreateTodo, Todo};
 
     // root関数のテスト
     #[tokio::test]
@@ -77,4 +85,96 @@ mod test {
         assert_eq!(body, "Hello, world!")
     }
 
+    // メソッドやボディを受けとり、リクエストを作る
+    fn build_todo_req_with_json(path: &str, method: Method, json_body: String) -> Request<Body> {
+        Request::builder()
+            .uri(path)
+            .method(method)
+            .header(header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+            .body(Body::from(json_body))
+            .unwrap()
+    }
+
+    // メソッドを受け取り、リクエストを作る（ボディは空）
+    fn build_todo_req_with_empty(method: Method, path: &str) -> Request<Body> {
+        Request::builder()
+            .uri(path)
+            .method(method)
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    // レスポンスを受け取り、BodyをTodo型に変換する
+    async fn res_to_todo(res: Response) -> Todo {
+        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let body: String = String::from_utf8(bytes.to_vec()).unwrap();
+        let todo: Todo = serde_json::from_str(&body).expect(&format!("cannot convert Todo instance. body: {}", body));
+        todo
+    }
+
+    #[tokio::test]
+    async fn should_create_todo() {
+        let expected = Todo::new(1, "should_return_created_todo".to_string());
+        let repository = TodoRepositoryForMemory::new();
+        let req = build_todo_req_with_json(
+            "/todos",
+            Method::POST,
+            r#"{ "text": "should_return_created_todo" }"#.to_string(),
+        );
+        // 疑似リクエストでリクエストの検証
+        let res = create_app(repository).oneshot(req).await.unwrap();
+        let todo = res_to_todo(res).await;
+        assert_eq!(expected, todo);
+    }
+
+    #[tokio::test]
+    async fn should_find_todo() {
+        let expected = Todo::new(1, "should_find_todo".to_string());
+
+        // repositoryを作成し、1件だけ保存してみる
+        let repository = TodoRepositoryForMemory::new();
+        repository.create(CreateTodo::new("should_find_todo".to_string()));
+
+        let req = build_todo_req_with_empty(Method::GET, "/todos/1");
+        let res = create_app(repository).oneshot(req).await.unwrap();
+        let todo = res_to_todo(res).await;
+        assert_eq!(expected, todo);
+    }
+
+    #[tokio::test]
+    async fn should_get_all_todos() {
+        let expected = Todo::new(1, "should_get_all_todos".to_string());
+
+        let repository = TodoRepositoryForMemory::new();
+        repository.create(CreateTodo::new("should_get_all_todos".to_string()));
+
+        let req = build_todo_req_with_empty(Method::GET, "/todos");
+        let res = create_app(repository).oneshot(req).await.unwrap();
+        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let body: String = String::from_utf8(bytes.to_vec()).unwrap();
+        // todoはベクトルになることに注意
+        let todo: Vec<Todo> = serde_json::from_str(&body).expect(&format!("cannot convert Todo instance. body: {}", body));
+        assert_eq!(vec![expected], todo);
+    }
+
+    #[tokio::test]
+    async fn should_update_todo() {
+        let expected = Todo::new(1, "should_update_todo".to_string());
+
+        let repository = TodoRepositoryForMemory::new();
+        repository.create(CreateTodo::new("should_update_todo".to_string()));
+
+        let req = build_todo_req_with_json(
+            "/todos/1",
+            Method::PATCH,
+            r#"{
+                "id": 1,
+                "text": "should_update_todo",
+                "completed": false
+            }"#.to_string(),
+        );
+        let res = create_app(repository).oneshot(req).await.unwrap();
+        let todo = res_to_todo(res).await;
+        assert_eq!(expected, todo);
+    }
 }
