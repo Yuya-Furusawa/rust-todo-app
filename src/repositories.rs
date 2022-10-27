@@ -167,7 +167,7 @@ mod test {
         let todo = repository
             .find(created.id)
             .await
-            .expect("[find] returned Err")
+            .expect("[find] returned Err");
         assert_eq!(created, todo);
 
         // allのテスト
