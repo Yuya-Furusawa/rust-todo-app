@@ -4,16 +4,15 @@ mod repositories;
 use axum::{
     extract::Extension,
     routing::{get, post},
-    Router
+    Router,
 };
+use dotenv::dotenv;
+use sqlx::PgPool;
 use std::net::SocketAddr;
-use std::{
-    env,
-    sync::{Arc},
-};
+use std::{env, sync::Arc};
 
-use repositories::{TodoRepository, TodoRepositoryForMemory};
-use handlers::{create_todo, find_todo, all_todo, update_todo, delete_todo};
+use handlers::{all_todo, create_todo, delete_todo, find_todo, update_todo};
+use repositories::{TodoRepository, TodoRepositoryForDb};
 
 #[tokio::main]
 async fn main() {
@@ -21,8 +20,15 @@ async fn main() {
     let log_lavel = env::var("RUST_LOG").unwrap_or("info".to_string());
     env::set_var("RUST_LOG", log_lavel);
     tracing_subscriber::fmt::init();
+    dotenv().ok();
 
-    let repository = TodoRepositoryForMemory::new();
+    let database_url = &env::var("DATABASE_URL").expect("undefined [DATABASE_URL]");
+    tracing::debug!("start connect database...");
+    let pool = PgPool::connect(database_url)
+        .await
+        .expect(&format!("fail connect database, url is [{}]", database_url));
+
+    let repository = TodoRepositoryForDb::new(pool.clone());
     let app = create_app(repository);
 
     // アドレスを作成する
@@ -33,9 +39,9 @@ async fn main() {
 
     // アドレスをサーバーにバインドし、サーバーを立ち上げる
     axum::Server::bind(&addr)
-    .serve(app.into_make_service())
-    .await // 非同期タスクはawaitされて初めて実行される
-    .unwrap();
+        .serve(app.into_make_service())
+        .await // 非同期タスクはawaitされて初めて実行される
+        .unwrap();
 }
 
 // ルーティング設定の作成
@@ -48,8 +54,8 @@ fn create_app<T: TodoRepository>(repository: T) -> Router {
             "/todos/:id",
             get(find_todo::<T>)
                 .delete(delete_todo::<T>)
-                .patch(update_todo::<T>)
-            )
+                .patch(update_todo::<T>),
+        )
         .layer(Extension(Arc::new(repository))) // axumアプリ内でrepositoryを共有できるようになる
 }
 
@@ -62,6 +68,7 @@ async fn root() -> &'static str {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::repositories::{test_utils::TodoRepositoryForMemory, CreateTodo, Todo};
     use axum::{
         body::Body,
         http::{header, Method, Request},
@@ -69,7 +76,6 @@ mod test {
     };
     use hyper::StatusCode;
     use tower::ServiceExt;
-    use crate::repositories::{CreateTodo, Todo};
 
     // root関数のテスト
     #[tokio::test]
@@ -109,7 +115,8 @@ mod test {
     async fn res_to_todo(res: Response) -> Todo {
         let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
-        let todo: Todo = serde_json::from_str(&body).expect(&format!("cannot convert Todo instance. body: {}", body));
+        let todo: Todo = serde_json::from_str(&body)
+            .expect(&format!("cannot convert Todo instance. body: {}", body));
         todo
     }
 
@@ -160,7 +167,8 @@ mod test {
         let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
         // todoはベクトルになることに注意
-        let todo: Vec<Todo> = serde_json::from_str(&body).expect(&format!("cannot convert Todo instance. body: {}", body));
+        let todo: Vec<Todo> = serde_json::from_str(&body)
+            .expect(&format!("cannot convert Todo instance. body: {}", body));
         assert_eq!(vec![expected], todo);
     }
 
@@ -181,7 +189,8 @@ mod test {
                 "id": 1,
                 "text": "should_update_todo",
                 "completed": false
-            }"#.to_string(),
+            }"#
+            .to_string(),
         );
         let res = create_app(repository).oneshot(req).await.unwrap();
         let todo = res_to_todo(res).await;
