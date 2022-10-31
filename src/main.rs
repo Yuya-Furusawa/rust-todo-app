@@ -8,6 +8,8 @@ use axum::{
 };
 use dotenv::dotenv;
 use sqlx::PgPool;
+use hyper::header::CONTENT_TYPE;
+use tower_http::cors::{Any, CorsLayer, Origin};
 use std::net::SocketAddr;
 use std::{env, sync::Arc};
 
@@ -57,6 +59,12 @@ fn create_app<T: TodoRepository>(repository: T) -> Router {
                 .patch(update_todo::<T>),
         )
         .layer(Extension(Arc::new(repository))) // axumアプリ内でrepositoryを共有できるようになる
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Origin::exact("http://localhost:3001".parse().unwrap()))
+                .allow_methods(Any)
+                .allow_headers(vec![CONTENT_TYPE])
+        )
 }
 
 async fn root() -> &'static str {
