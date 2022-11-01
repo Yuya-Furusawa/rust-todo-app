@@ -13,8 +13,8 @@ use tower_http::cors::{Any, CorsLayer, Origin};
 use std::net::SocketAddr;
 use std::{env, sync::Arc};
 
-use handlers::{all_todo, create_todo, delete_todo, find_todo, update_todo};
-use repositories::{TodoRepository, TodoRepositoryForDb};
+use handlers::todo::{all_todo, create_todo, delete_todo, find_todo, update_todo};
+use repositories::todo::{TodoRepository, TodoRepositoryForDb};
 
 #[tokio::main]
 async fn main() {
@@ -76,7 +76,7 @@ async fn root() -> &'static str {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::repositories::{test_utils::TodoRepositoryForMemory, CreateTodo, Todo};
+    use crate::repositories::todo::{test_utils::TodoRepositoryForMemory, CreateTodo, Todo};
     use axum::{
         body::Body,
         http::{header, Method, Request},
