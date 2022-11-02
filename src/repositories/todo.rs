@@ -1,17 +1,9 @@
 use axum::async_trait;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, FromRow};
-use thiserror::Error;
 use validator::Validate;
 
-// 起こりうるエラーの定義
-#[derive(Debug, Error)]
-enum RepositoryError {
-    #[error("Unexpected Error: [{0}]")]
-    Unexpected(String),
-    #[error("NotFound id is {0}")]
-    NotFound(i32),
-}
+use super::RepositoryError;
 
 // データレポジトリを作成
 
