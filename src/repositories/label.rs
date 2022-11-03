@@ -133,3 +133,93 @@ mod test {
             .expect("[delete] returned Err");
     }
 }
+
+#[cfg(test)]
+pub mod test_utils {
+    use anyhow::Ok;
+    use axum::async_trait;
+    use std::{
+        collections::HashMap,
+        sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    };
+
+    use super::*;
+
+    impl Label {
+        pub fn new(id: i32, name: String) -> Self {
+            Self { id, name, }
+        }
+    }
+
+    type LabelDatas = HashMap<i32, Label>;
+
+    #[derive(Debug, Clone)]
+    pub struct LabelRepositoryForMemory {
+        store: Arc<RwLock<LabelDatas>>
+    }
+
+    impl LabelRepositoryForMemory {
+        pub fn new() -> Self {
+            LabelRepositoryForMemory {
+                store: Arc::default(),
+            }
+        }
+
+        fn write_store_ref(&self) -> RwLockWriteGuard<LabelDatas> {
+            self.store.write().unwrap()
+        }
+
+        fn read_store_ref(&self) -> RwLockReadGuard<LabelDatas> {
+            self.store.read().unwrap()
+        }
+    }
+
+    #[async_trait]
+    impl LabelRepository for LabelRepositoryForMemory {
+        async fn create(&self, name: String) -> anyhow::Result<Label> {
+            let mut store = self.write_store_ref();
+            let id: i32 = (store.len() + 1) as i32;
+            let label = Label::new(id, name.clone());
+            store.insert(id, label.clone());
+            Ok(label)
+        }
+
+        async fn all(&self) -> anyhow::Result<Vec<Label>> {
+            let store = self.read_store_ref();
+            Ok(Vec::from_iter(store.values().map(| label| label.clone())))
+        }
+
+        async fn delete(&self, id: i32) -> anyhow::Result<()> {
+            let mut store = self.write_store_ref();
+            store.remove(&id).ok_or(RepositoryError::NotFound(id))?;
+            Ok(())
+        }
+    }
+
+    mod test {
+        use super::*;
+
+        #[tokio::test]
+        async fn label_crud_scenario() {
+            let text = "label text".to_string();
+            let id = 1;
+            let expected = Label::new(id, text.clone());
+
+            // create
+            let repository = LabelRepositoryForMemory::new();
+            let label = repository
+                .create(text)
+                .await
+                .expect("failed create label");
+            assert_eq!(expected, label);
+
+            // all
+            let label = repository.all().await.expect("failed get all labels");
+            assert_eq!(vec![expected], label);
+
+            // delete
+            let res = repository.delete(id).await;
+            assert!(res.is_ok());
+        }
+    }
+}
