@@ -178,6 +178,10 @@ pub mod test_utils {
     impl LabelRepository for LabelRepositoryForMemory {
         async fn create(&self, name: String) -> anyhow::Result<Label> {
             let mut store = self.write_store_ref();
+            if let Some((_key, label)) = store.iter().find(|(_key, label)| label.name == name) {
+                return Ok(label.clone());
+            }
+
             let id: i32 = (store.len() + 1) as i32;
             let label = Label::new(id, name.clone());
             store.insert(id, label.clone());

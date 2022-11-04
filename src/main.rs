@@ -62,7 +62,11 @@ fn create_app<Todo: TodoRepository, Label: LabelRepository>(
 ) -> Router {
     Router::new()
         .route("/", get(root))
-        .route("/todos", post(create_todo::<Todo>).get(all_todo::<Todo>))
+        .route(
+            "/todos",
+            post(create_todo::<Todo>)
+                .get(all_todo::<Todo>)
+        )
         .route(
             "/todos/:id",
             get(find_todo::<Todo>)
@@ -124,7 +128,7 @@ mod test {
     }
 
     // メソッドやボディを受けとり、リクエストを作る
-    fn build_todo_req_with_json(path: &str, method: Method, json_body: String) -> Request<Body> {
+    fn build_req_with_json(path: &str, method: Method, json_body: String) -> Request<Body> {
         Request::builder()
             .uri(path)
             .method(method)
@@ -134,7 +138,7 @@ mod test {
     }
 
     // メソッドを受け取り、リクエストを作る（ボディは空）
-    fn build_todo_req_with_empty(method: Method, path: &str) -> Request<Body> {
+    fn build_req_with_empty(method: Method, path: &str) -> Request<Body> {
         Request::builder()
             .uri(path)
             .method(method)
@@ -151,10 +155,19 @@ mod test {
         todo
     }
 
+    // レスポンスを受け取り、BodyをLabel型に変換する
+    async fn res_to_label(res: Response) -> Label {
+        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let body: String = String::from_utf8(bytes.to_vec()).unwrap();
+        let label: Label = serde_json::from_str(&body)
+            .expect(&format!("cannot convert Label instance. body: {}", body));
+        label
+    }
+
     #[tokio::test]
     async fn should_create_todo() {
         let expected = Todo::new(1, "should_return_created_todo".to_string());
-        let req = build_todo_req_with_json(
+        let req = build_req_with_json(
             "/todos",
             Method::POST,
             r#"{ "text": "should_return_created_todo" }"#.to_string(),
@@ -169,6 +182,22 @@ mod test {
     }
 
     #[tokio::test]
+    async fn should_create_label() {
+        let expected = Label::new(1, "should_return_created_label".to_string());
+        let req = build_req_with_json(
+            "/labels",
+            Method::POST,
+            r#"{ "name": "should_return_created_label" }"#.to_string(),
+        );
+        let res = create_app(
+            TodoRepositoryForMemory::new(),
+            LabelRepositoryForMemory::new(),
+        ).oneshot(req).await.unwrap();
+        let label = res_to_label(res).await;
+        assert_eq!(expected, label);
+    }
+
+    #[tokio::test]
     async fn should_find_todo() {
         let expected = Todo::new(1, "should_find_todo".to_string());
 
@@ -179,9 +208,9 @@ mod test {
             .await
             .expect("failed create todo");
 
-        let req = build_todo_req_with_empty(Method::GET, "/todos/1");
+        let req = build_req_with_empty(Method::GET, "/todos/1");
         let res = create_app(
-            TodoRepositoryForMemory::new(),
+            repository,
             LabelRepositoryForMemory::new(),
         ).oneshot(req).await.unwrap();
         let todo = res_to_todo(res).await;
@@ -198,9 +227,9 @@ mod test {
             .await
             .expect("failed create todo");
 
-        let req = build_todo_req_with_empty(Method::GET, "/todos");
+        let req = build_req_with_empty(Method::GET, "/todos");
         let res = create_app(
-            TodoRepositoryForMemory::new(),
+            repository,
             LabelRepositoryForMemory::new(),
         ).oneshot(req).await.unwrap();
         let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -209,6 +238,28 @@ mod test {
         let todo: Vec<Todo> = serde_json::from_str(&body)
             .expect(&format!("cannot convert Todo instance. body: {}", body));
         assert_eq!(vec![expected], todo);
+    }
+
+    #[tokio::test]
+    async fn should_get_all_labels() {
+        let expected = Label::new(1, "should_get_all_labels".to_string());
+
+        let repository = LabelRepositoryForMemory::new();
+        repository
+            .create("should_get_all_labels".to_string())
+            .await
+            .expect("failed create label");
+
+        let req = build_req_with_empty(Method::GET, "/labels");
+        let res = create_app(
+            TodoRepositoryForMemory::new(),
+            repository,
+        ).oneshot(req).await.unwrap();
+        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let body: String = String::from_utf8(bytes.to_vec()).unwrap();
+        let label: Vec<Label> = serde_json::from_str(&body)
+            .expect(&format!("cannot convert Label instance. body: {}", body));
+        assert_eq!(vec![expected], label);
     }
 
     #[tokio::test]
@@ -221,7 +272,7 @@ mod test {
             .await
             .expect("failed create todo");
 
-        let req = build_todo_req_with_json(
+        let req = build_req_with_json(
             "/todos/1",
             Method::PATCH,
             r#"{
@@ -232,7 +283,7 @@ mod test {
             .to_string(),
         );
         let res = create_app(
-            TodoRepositoryForMemory::new(),
+            repository,
             LabelRepositoryForMemory::new(),
         ).oneshot(req).await.unwrap();
         let todo = res_to_todo(res).await;
@@ -247,10 +298,26 @@ mod test {
             .await
             .expect("failed create todo");
 
-        let req = build_todo_req_with_empty(Method::DELETE, "/todos/1");
+        let req = build_req_with_empty(Method::DELETE, "/todos/1");
+        let res = create_app(
+            repository,
+            LabelRepositoryForMemory::new(),
+        ).oneshot(req).await.unwrap();
+        assert_eq!(StatusCode::NO_CONTENT, res.status());
+    }
+
+    #[tokio::test]
+    async fn should_delete_label() {
+        let repository = LabelRepositoryForMemory::new();
+        repository
+            .create("should_delete_label".to_string())
+            .await
+            .expect("failed create label");
+
+        let req = build_req_with_empty(Method::DELETE, "/labels/1");
         let res = create_app(
             TodoRepositoryForMemory::new(),
-            LabelRepositoryForMemory::new(),
+            repository,
         ).oneshot(req).await.unwrap();
         assert_eq!(StatusCode::NO_CONTENT, res.status());
     }
