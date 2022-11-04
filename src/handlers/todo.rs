@@ -1,44 +1,16 @@
 use axum::{
-    async_trait,
-    extract::{Extension, FromRequest, Path, RequestParts},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    BoxError, Json,
+    Json,
 };
-use serde::de::DeserializeOwned;
 use std::sync::Arc;
-use validator::Validate;
 
 use crate::repositories::todo::{CreateTodo, TodoRepository, UpdateTodo};
+use super::ValidateJson;
 
 // 各種httpハンドラーを作成
 // ここで作成したハンドラーはルート設定の際に使われる
-
-#[derive(Debug)]
-pub struct ValidateJson<T>(T);
-
-#[async_trait]
-impl<T, B> FromRequest<B> for ValidateJson<T>
-where
-    T: DeserializeOwned + Validate,
-    B: http_body::Body + Send,
-    B::Data: Send,
-    B::Error: Into<BoxError>,
-{
-    type Rejection = (StatusCode, String);
-
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let Json(value) = Json::<T>::from_request(req).await.map_err(|rejection| {
-            let message = format!("Json parse error: [{}]", rejection);
-            (StatusCode::BAD_REQUEST, message)
-        })?;
-        value.validate().map_err(|rejection| {
-            let message = format!("Validate error: [{}]", rejection).replace('\n', ", ");
-            (StatusCode::BAD_REQUEST, message)
-        })?;
-        Ok(ValidateJson(value))
-    }
-}
 
 pub async fn create_todo<T: TodoRepository>(
     ValidateJson(payload): ValidateJson<CreateTodo>,
