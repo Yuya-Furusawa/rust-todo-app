@@ -99,7 +99,7 @@ async fn root() -> &'static str {
 mod test {
     use super::*;
     use crate::repositories::{
-        todo::{test_utils::TodoRepositoryForMemory, CreateTodo, Todo},
+        todo::{test_utils::TodoRepositoryForMemory, CreateTodo, TodoEntity},
         label::{test_utils::LabelRepositoryForMemory, Label},
     };
     use axum::{
@@ -147,10 +147,10 @@ mod test {
     }
 
     // レスポンスを受け取り、BodyをTodo型に変換する
-    async fn res_to_todo(res: Response) -> Todo {
+    async fn res_to_todo(res: Response) -> TodoEntity {
         let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
-        let todo: Todo = serde_json::from_str(&body)
+        let todo: TodoEntity = serde_json::from_str(&body)
             .expect(&format!("cannot convert Todo instance. body: {}", body));
         todo
     }
@@ -166,7 +166,7 @@ mod test {
 
     #[tokio::test]
     async fn should_create_todo() {
-        let expected = Todo::new(1, "should_return_created_todo".to_string());
+        let expected = TodoEntity::new(1, "should_return_created_todo".to_string());
         let req = build_req_with_json(
             "/todos",
             Method::POST,
@@ -199,7 +199,7 @@ mod test {
 
     #[tokio::test]
     async fn should_find_todo() {
-        let expected = Todo::new(1, "should_find_todo".to_string());
+        let expected = TodoEntity::new(1, "should_find_todo".to_string());
 
         // repositoryを作成し、1件だけ保存してみる
         let repository = TodoRepositoryForMemory::new();
@@ -219,7 +219,7 @@ mod test {
 
     #[tokio::test]
     async fn should_get_all_todos() {
-        let expected = Todo::new(1, "should_get_all_todos".to_string());
+        let expected = TodoEntity::new(1, "should_get_all_todos".to_string());
 
         let repository = TodoRepositoryForMemory::new();
         repository
@@ -235,7 +235,7 @@ mod test {
         let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
         // todoはベクトルになることに注意
-        let todo: Vec<Todo> = serde_json::from_str(&body)
+        let todo: Vec<TodoEntity> = serde_json::from_str(&body)
             .expect(&format!("cannot convert Todo instance. body: {}", body));
         assert_eq!(vec![expected], todo);
     }
@@ -264,7 +264,7 @@ mod test {
 
     #[tokio::test]
     async fn should_update_todo() {
-        let expected = Todo::new(1, "should_update_todo".to_string());
+        let expected = TodoEntity::new(1, "should_update_todo".to_string());
 
         let repository = TodoRepositoryForMemory::new();
         repository
