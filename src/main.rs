@@ -201,10 +201,13 @@ mod test {
     async fn should_find_todo() {
         let expected = TodoEntity::new(1, "should_find_todo".to_string());
 
+        todo!("labelデータの追加");
+        let labels = vec![];
+
         // repositoryを作成し、1件だけ保存してみる
         let repository = TodoRepositoryForMemory::new();
         repository
-            .create(CreateTodo::new("should_find_todo".to_string()))
+            .create(CreateTodo::new("should_find_todo".to_string(), labels))
             .await
             .expect("failed create todo");
 
@@ -221,9 +224,12 @@ mod test {
     async fn should_get_all_todos() {
         let expected = TodoEntity::new(1, "should_get_all_todos".to_string());
 
+        todo!("labelデータの追加");
+        let labels = vec![];
+
         let repository = TodoRepositoryForMemory::new();
         repository
-            .create(CreateTodo::new("should_get_all_todos".to_string()))
+            .create(CreateTodo::new("should_get_all_todos".to_string(), labels))
             .await
             .expect("failed create todo");
 
@@ -266,9 +272,12 @@ mod test {
     async fn should_update_todo() {
         let expected = TodoEntity::new(1, "should_update_todo".to_string());
 
+        todo!("labelデータの追加");
+        let labels = vec![];
+
         let repository = TodoRepositoryForMemory::new();
         repository
-            .create(CreateTodo::new("should_update_todo".to_string()))
+            .create(CreateTodo::new("should_update_todo".to_string(), labels))
             .await
             .expect("failed create todo");
 
@@ -292,9 +301,12 @@ mod test {
 
     #[tokio::test]
     async fn should_delete_todo() {
+        todo!("labelデータの追加");
+        let labels = vec![];
+
         let repository = TodoRepositoryForMemory::new();
         repository
-            .create(CreateTodo::new("should_delete_todo".to_string()))
+            .create(CreateTodo::new("should_delete_todo".to_string(), labels))
             .await
             .expect("failed create todo");
 
