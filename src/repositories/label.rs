@@ -106,6 +106,8 @@ mod test {
     #[tokio::test]
     async fn crud_scenario() {
         dotenv().ok();
+        // ここのテストコケる
+        // 本番のデータベースを使ってテストしているので、ラベルの重複エラーが発生する
         let database_url = &env::var("DATABASE_URL").expect("undefined [DATABASE_URL]");
         let pool = PgPool::connect(database_url)
             .await
