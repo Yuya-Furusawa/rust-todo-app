@@ -7,6 +7,7 @@ export type Todo = {
 
 export type NewTodoPayload = {
   text: string
+  labels: number[]
 }
 
 export type UpdateTodoPayload = Partial<Omit<Todo, 'id'>> & {
