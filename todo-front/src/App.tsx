@@ -2,7 +2,7 @@ import { FC, useState, useEffect } from "react"
 import 'modern-css-reset'
 import { ThemeProvider, createTheme } from "@mui/material/styles"
 import { Box, Stack, Typography } from '@mui/material'
-import { NewTodoPayload, Todo, NewLabelPayload, Label } from "./types/todos"
+import { NewTodoPayload, Todo, UpdateTodoPayload, NewLabelPayload, Label } from "./types/todos"
 import TodoForm from './components/TodoForm'
 import TodoList from "./components/TodoList"
 import SideNav from "./components/SideNav"
@@ -22,7 +22,7 @@ const TodoApp: FC = () => {
     setTodos(todos)
   }
 
-  const onUpdate = async (updateTodo: Todo) => {
+  const onUpdate = async (updateTodo: UpdateTodoPayload) => {
     await updateTodoItem(updateTodo)
     const todos = await getTodoItems() // APIから再度Todo配列を取得する
     setTodos(todos)
@@ -117,6 +117,7 @@ const TodoApp: FC = () => {
               todos={dispTodo}
               onUpdate={onUpdate}
               onDelete={onDelete}
+              labels={labels}
             />
           </Stack>
         </Box>

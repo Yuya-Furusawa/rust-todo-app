@@ -10,8 +10,11 @@ export type NewTodoPayload = {
   labels: number[]
 }
 
-export type UpdateTodoPayload = Partial<Omit<Todo, 'id'>> & {
+export type UpdateTodoPayload = {
   id: number
+  text?: string
+  completed?: boolean
+  labels?: number[]
 }
 
 export type Label = {
